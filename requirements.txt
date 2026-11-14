@@ -1,0 +1,10 @@
+# --- Batch 1: data generator --------------------------------------------------
+pandas>=2.0,<4.0
+numpy>=1.24,<3.0
+
+# --- Batch 2: Snowflake orchestration & tests --------------------------------
+snowflake-connector-python[pandas]>=3.10
+cryptography>=42.0          # key-pair authentication for Snowflake
+python-dotenv>=1.0
+pytest>=8.0
+sqlfluff>=3.0               # SQL linting (Snowflake dialect)
