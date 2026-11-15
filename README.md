@@ -5,6 +5,9 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![Power BI](https://img.shields.io/badge/Power%20BI-Semantic%20Model-F2C811?logo=powerbi&logoColor=black)
 ![IFRS](https://img.shields.io/badge/IFRS%2010%20%7C%20IAS%2021-Consolidation-2E7D32)
+[![tests](https://github.com/mohammedelsayed741996-blip/pharma-group-consolidation-snowflake-final/actions/workflows/tests.yml/badge.svg)](https://github.com/mohammedelsayed741996-blip/pharma-group-consolidation-snowflake-final/actions/workflows/tests.yml)
+![Tests](https://img.shields.io/badge/tests-86%20(67%20offline%20%2B%2019%20Snowflake)-informational)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 An end-to-end finance BI platform that consolidates a multinational pharmaceutical group in
 **Snowflake** and serves **statutory (IFRS)** and **management (business-unit)** reporting from one
@@ -366,12 +369,14 @@ budget FX rates (prior-December closing rate).
 ## 7. Repository structure
 
 ```
-pharma-group-consolidation-snowflake/
+pharma-group-consolidation-snowflake-final/
 ├── README.md
+├── LICENSE                          # MIT
 ├── requirements.txt
 ├── .gitignore
 ├── .env.example                     # Snowflake connection template (copy to .env)
 ├── pytest.ini
+├── .github/workflows/tests.yml      # CI: the 67 offline tests on every push
 ├── generator/                       # synthetic data (Python)
 │   ├── config.py                    # entities, currencies, 120-account CoA, drivers, DQ rule catalogue
 │   ├── generate_master_data.py      # entities, CoA, local mappings, cost/profit centres, FX
@@ -397,8 +402,8 @@ pharma-group-consolidation-snowflake/
 │   ├── test_sql_static.py           # SQL lint: objects created before use, RAW columns = CSV headers, seeds
 │   ├── test_run_pipeline.py         # SQL statement splitter
 │   └── test_snowflake_integration.py# opt-in: same checks against your Snowflake account + RLS + tasks
-├── powerbi/                         # (Batch 3) PBIP project, DAX measures, Power Query M, build guide
-├── adf/                             # (Batch 3, optional) Azure Data Factory copy pipeline (JSON)
+├── powerbi/                         # Batch 3 – not yet published in this repository
+├── adf/                             # Batch 3, optional – not yet published in this repository
 └── data/                            # generated locally (git-ignored)
     ├── master/  fx/                 # reference data and exchange rates
     ├── raw/tb/                      # tb_<company>_<yyyymm>.csv (period 00 = opening balances)
@@ -416,8 +421,8 @@ pharma-group-consolidation-snowflake/
 ### 8.1 Generate the data locally (about 10 seconds)
 
 ```bash
-git clone https://github.com/mohammedelsayed741996-blip/pharma-group-consolidation-snowflake.git
-cd pharma-group-consolidation-snowflake
+git clone https://github.com/mohammedelsayed741996-blip/pharma-group-consolidation-snowflake-final.git
+cd pharma-group-consolidation-snowflake-final
 python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -472,23 +477,38 @@ Useful options:
 
 ### 8.3 Tests
 
+The suite has **86 tests**: **67 offline tests** that need nothing but Python, and **19 Snowflake
+integration tests** that run against a live account and are skipped unless you opt in.
+
+| File | Tests | Runs | What it proves |
+|---|---:|---|---|
+| `tests/test_generator.py` | 8 | offline | Clean data is internally consistent (every TB balances, every IC pair matches), deterministic for a fixed seed, and the answer key is complete |
+| `tests/test_reference_engine.py` | 27 | offline | Consolidation is correct (translation, CTA, eliminations, goodwill/NCI, UPI, EBITDA bridge, cash flow) and **each of the 12 planted defects** is caught by the right rule at the right entity and period, with no unexplained findings |
+| `tests/test_sql_static.py` | 26 | offline | SQL lint: every object is created before it is used, RAW columns match the CSV headers, SQL seeds match the reference engine, all 12 DQ rules exist |
+| `tests/test_run_pipeline.py` | 6 | offline | SQL statement splitter and template rendering of the CLI |
+| **Offline subtotal** | **67** | CI on every push | |
+| `tests/test_snowflake_integration.py` | 19 | Snowflake (opt-in) | The 12 planted defects in `AUDIT.DQ_RESULTS`, cell-by-cell reconciliation of every fact and cash-flow cell with the reference engine, row-level security and the task DAG |
+| **Total** | **86** | | |
+
 ```bash
-pytest                                              # 67 offline tests, ~35 s, no Snowflake needed
-HELIX_RUN_SNOWFLAKE_TESTS=1 pytest -m snowflake     # after "run_pipeline.py all" (PowerShell: $env:HELIX_RUN_SNOWFLAKE_TESTS=1)
+pytest                                              # 67 passed, 19 skipped (~35 s, no Snowflake needed)
+pytest -m "not snowflake"                           # the 67 offline tests only (what CI runs)
+HELIX_RUN_SNOWFLAKE_TESTS=1 pytest -m snowflake     # the 19 integration tests, after "run_pipeline.py all"
+                                                    # (PowerShell: $env:HELIX_RUN_SNOWFLAKE_TESTS=1)
 ```
 
-The offline suite generates its own data sets, runs the pandas **reference engine** (the same rules as
-the SQL) and asserts that every one of the 12 planted defects is detected by the right rule at the
-right entity and period, with no unexplained findings. It also lints the SQL: every object is
-created before it is used, RAW columns match the CSV headers, and SQL seeds match the reference engine.
-The Snowflake suite repeats the defect checks on `AUDIT.DQ_RESULTS`, reconciles every fact and
-cash-flow cell with the reference engine (`verify`), and tests row-level security and the task DAG.
+The offline suite generates its own data sets in a temporary folder, so it never depends on a
+local `data/` folder. GitHub Actions runs it on every push
+([`.github/workflows/tests.yml`](.github/workflows/tests.yml)). The Snowflake suite is not run in CI
+because it needs a live account and credentials.
 
 ### 8.4 Power BI
 
-Open `powerbi/HelixConsolidation.pbip` in Power BI Desktop, point the Snowflake connection
-parameters to your account and refresh. The build guide in `powerbi/` documents every DAX measure,
-Power Query step and report page.
+> **Status:** the Power BI layer (Batch 3) is not yet published in this repository. The marts in
+> `snowflake/40_marts/` are the star schema it will read from.
+
+Planned: a `powerbi/HelixConsolidation.pbip` project that connects to the Snowflake marts, with a build
+guide documenting every DAX measure, Power Query step and report page.
 
 ---
 
@@ -517,24 +537,31 @@ Power Query step and report page.
 
 ### Consolidation metrics
 
-Expected values, computed by the reference engine on the default data set after the late GB01
-file is loaded. `run_pipeline.py verify` proves that Snowflake produces the same numbers. Fill in the
-last column from your own run.
+Computed by the pandas **reference engine** (`orchestration/reference_engine.py`, the same rules as
+the SQL) on the default data set (seed 42) after the late GB01 file is loaded. Reproduce offline with:
 
-| Metric | Expected | Snowflake run |
+```bash
+python generator/run_all.py
+python -m orchestration.reference_engine --include-late
+```
+
+Snowflake must return the same numbers: `run_pipeline.py verify` reconciles every fact and cash-flow
+cell against the reference engine, and the opt-in integration tests (`pytest -m snowflake`) fail on
+any difference.
+
+| Metric | Value | Source |
 |---|---|---|
-| Consolidated net sales 2023 / 2024 / 2025 (EUR m) | 361.4 / 383.7 / 413.0 | `[verify]` |
-| Statutory EBITDA 2025 (EUR m) / margin | 102.1 / 24.7 % | `[verify]` |
-| Adjusted EBITDA 2025 (EUR m), after EUR 2.8m non-recurring items | 104.9 | `[verify]` |
-| Net sales growth 2025: reported vs constant currency | 7.6 % vs 7.3 % | `[verify]` |
-| IC revenue eliminated 2023 / 2024 / 2025 (EUR m) | 164.3 / 185.9 / 201.0 | `[verify]` |
-| Unrealised profit in inventory, end 2025 (EUR m) | 3.7 | `[verify]` |
-| Goodwill PL01 / NCI end 2025 (EUR m) | 8.0 / 2.6 | `[verify]` |
-| CTA reserve end 2025 (EUR m, cumulative since acquisition) | −3.9 (loss) | `[verify]` |
-| IC pairs checked / matched within tolerance | 1,599 / 97.4 % | `[verify]` |
-| Planted defects detected | 12 / 12 | `[pytest -m snowflake]` |
-| Group periods blocked (before / after late file) | 7 / 6 | `[status]` |
-| Full pipeline runtime on XSMALL warehouse | n/a | `[all]` |
+| Consolidated net sales 2023 / 2024 / 2025 (EUR m) | 361.4 / 383.7 / 413.0 | `summary()["net_sales_eur"]` |
+| Statutory EBITDA 2025 (EUR m) / margin | 102.1 / 24.7 % | `summary()["ebitda_statutory_eur"]` |
+| Adjusted EBITDA 2025 (EUR m), after EUR 2.8m non-recurring items | 104.9 | `summary()["ebitda_adjusted_eur"]` |
+| Net sales growth 2025: reported vs constant currency | 7.6 % vs 7.3 % | Constant currency = 2025 at budget rates (`amount_gc_cc`) vs 2024 reported |
+| IC revenue eliminated 2023 / 2024 / 2025 (EUR m) | 164.3 / 185.9 / 201.0 | `summary()["ic_revenue_eliminated_eur"]` |
+| Unrealised profit in inventory, end 2025 (EUR m) | 3.7 | `summary()["upi_end_eur"]` |
+| Goodwill PL01 / NCI end 2025 (EUR m) | 8.0 / 2.6 | `summary()["goodwill_eur"]`, `["nci_end_eur"]` |
+| CTA reserve end 2025 (EUR m, cumulative since acquisition) | −3.9 (loss) | `summary()["cta_reserve_end_eur"]` |
+| IC pairs checked / matched within tolerance | 1,599 / 97.4 % | `summary()["ic_pairs_checked"]`, `["ic_match_rate_pct"]` |
+| Planted defects detected | 12 / 12 | Offline: `test_each_planted_error_is_detected`; Snowflake: `pytest -m snowflake` |
+| Group periods blocked (before / after late file) | 7 / 6 | `summary()["periods_blocked"]` without / with `--include-late` |
 
 ---
 
@@ -562,15 +589,18 @@ last column from your own run.
 |---|---|
 | **Dimensional modelling** (facts, conformed dimensions, SCD Type 2, role-playing dimensions) | `snowflake/40_marts/`, ERD above |
 | **SQL** (CTEs, window functions, `QUALIFY`, `MERGE`, Snowflake Scripting) | `snowflake/` |
-| **ETL/ELT** (stages, `COPY INTO`, streams, tasks, optional ADF) | `snowflake/10_raw/`, `60_tasks/`, `adf/` |
+| **ETL/ELT** (stages, `COPY INTO`, streams, tasks, optional ADF) | `snowflake/10_raw/`, `60_tasks/` (ADF pipeline: Batch 3, not yet published) |
 | **Financial consolidation** (IAS 21, IFRS 10, IC eliminations, UPI, NCI, goodwill, CTA) | `snowflake/30_integration/` |
 | **SAP FI/CO data structures** (company code, G/L, trading partner, cost & profit centres) | `generator/`, data model |
 | **Data quality & governance** (12 rules, answer-key testing, row access policy, secure sharing) | `snowflake/50_audit/`, `70_security_sharing/`, `tests/` |
-| **Power BI** (star schema, DAX, Power Query, RLS, PBIP in Git) | `powerbi/` |
+| **Power BI** (star schema, DAX, Power Query, RLS, PBIP in Git) | `powerbi/` (Batch 3, not yet published) |
 | **Python** (simulation, pandas validation, pytest, CLI tooling) | `generator/`, `orchestration/`, `tests/` |
+| **CI** (GitHub Actions running the 67 offline tests on every push) | `.github/workflows/tests.yml` |
 
 ---
 
 *Author: Mohamed Abdelrasoul ·
 [LinkedIn](https://linkedin.com/in/mohamed-abdelrasoul-b07002173) ·
 [GitHub](https://github.com/mohammedelsayed741996-blip)*
+
+*Licensed under the [MIT License](LICENSE).*
