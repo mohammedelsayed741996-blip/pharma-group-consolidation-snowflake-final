@@ -1,0 +1,24 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  offline-tests:
+    name: Offline tests (no Snowflake)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run the 67 offline tests
+        # Snowflake integration tests are deselected here; they need a live account
+        # (HELIX_RUN_SNOWFLAKE_TESTS=1 pytest -m snowflake).
+        run: pytest -m "not snowflake" -q
